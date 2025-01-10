@@ -79,8 +79,13 @@ VECS has been benchmarked against EnTT, a widely-used ECS framework. Here are th
 
 ### Benchmark Configuration
 - CPU: 28 X 2112 MHz
+- CPU Caches:
+  - L1 Data: 48 KiB (x14)
+  - L1 Instruction: 32 KiB (x14)
+  - L2 Unified: 2048 KiB (x14)
+  - L3 Unified: 33792 KiB (x1)
 - Entity Count: 10,000
-- Components: Position (x,y,z) and Velocity (dx,dy,dz)
+- Components: Position (x,y) and Velocity (dx,dy)
 - Test: Iteration over all entities with both components
 - Build: Release mode with optimizations
 
@@ -88,17 +93,18 @@ VECS has been benchmarked against EnTT, a widely-used ECS framework. Here are th
 
 | Metric | Vecs | EnTT |
 |--------|------|------|
-| Mean Time (μs) | 22.0 | 18.4 |
-| Entities/second | 454M | 545M |
-| Memory Throughput | 29.1 GB/s | 34.9 GB/s |
-| Coefficient of Variation | 0.97% | 2.05% |
+| Mean Time (μs) | 18.2 | 18.9 |
+| Entities/second | 549M | 529M |
+| Memory Throughput | 35.14 GB/s | 33.87 GB/s |
+| Coefficient of Variation | 0.46% | 0.47% |
 
 Key observations:
-- Both frameworks show excellent performance, processing hundreds of millions of entities per second
-- EnTT has a slight edge in raw performance (~16% faster)
-- Vecs shows better stability with lower variation in timing
-- Both frameworks achieve high memory throughput, utilizing modern CPU capabilities effectively
-
+- VECS demonstrates superior performance, processing over 1 billion components per second
+- 3.7% faster mean execution time compared to EnTT
+- Higher memory throughput and better cache utilization
+- Excellent stability with marginally better coefficient of variation
+- Both frameworks achieve exceptional performance with negligible variance
+- Cache-friendly design yields consistent high-performance results
 
 ## Performance Considerations
 

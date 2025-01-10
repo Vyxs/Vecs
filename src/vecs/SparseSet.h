@@ -1,221 +1,182 @@
 //
 // Created by Vyxs on 05/01/2025.
 //
-
 #ifndef SPARSESET_H
 #define SPARSESET_H
 
+#include <vector>
 #include <algorithm>
 #include <numeric>
-#include <vector>
-#include <memory>
-#include <cassert>
+
 #include "Entity.h"
 
 namespace vecs {
-    /**
-     * @brief Default allocator for allocating memory for components
-     * @tparam T Component type
-     */
     template<typename T>
     class DefaultAllocator : public std::allocator<T> {
     public:
         using std::allocator<T>::allocator;
-
         template<typename U>
-        struct rebind {
-            using other = DefaultAllocator<U>;
-        };
+        struct rebind { using other = DefaultAllocator<U>; };
     };
 
-    /**
-     * @brief Data structure to manage entities and their associated components efficiently
-     * @tparam T Component type
-     * @tparam Allocator Allocator type for memory management
-     */
     template<typename T, typename Allocator = DefaultAllocator<T>>
     class SparseSet {
+        using EntityAllocator = typename std::allocator_traits<Allocator>::template rebind_alloc<Entity>;
 
-        using AllocTraits = std::allocator_traits<Allocator>;
-        using EntityAllocator = typename AllocTraits::template rebind_alloc<Entity>;
+        std::vector<Entity, EntityAllocator> sparse;
+        std::vector<Entity, EntityAllocator> dense;
+        std::vector<T, Allocator> components;
 
-        std::vector<Entity, EntityAllocator> dense{};
-        std::vector<Entity, EntityAllocator> sparse{};
-        std::vector<T, Allocator> components{};
+        static constexpr size_t initialSize = 8192;
+        static constexpr size_t pageSize = 4096;
+        static constexpr size_t growthFactor = 2;
 
-        size_t pageSize = 4096;
-        static constexpr size_t minCapacity = 64;
+        [[nodiscard]] static constexpr size_t roundUpPow2(size_t n) noexcept {
+            if (n == 0) return initialSize;
+            n--;
+            n |= n >> 1;
+            n |= n >> 2;
+            n |= n >> 4;
+            n |= n >> 8;
+            n |= n >> 16;
+            if constexpr (sizeof(size_t) == 8) n |= n >> 32;
+            return n + 1;
+        }
 
-        /**
-         * @brief Ensures sufficient space for the given entity
-         */
-        void assureSpace(const Entity entity) {
-            const auto entityId = entity.getId();
-            if (entityId >= sparse.size()) {
-                const auto current = sparse.size();
-                const auto required = static_cast<size_t>(entityId) + 1;
-                const auto size = required + (required >> 1);
-
-                const auto alignedSize = size + pageSize - 1 & ~(pageSize - 1);
-                sparse.resize(alignedSize, Entity::null());
-
-                const auto estimated = std::min(alignedSize, static_cast<size_t>(entityId * 1.2));
-                if (estimated > dense.capacity()) {
-                    dense.reserve(estimated);
-                    components.reserve(estimated);
-                }
-            }
+        void reserveAndAlignStorage(const size_t newCapacity) {
+            const size_t aligned = roundUpPow2(newCapacity);
+            sparse.reserve(aligned);
+            dense.reserve(aligned);
+            components.reserve(aligned);
         }
 
     public:
-        /**
-         * @brief Constructs a SparseSet with initial capacity
-         */
-        explicit SparseSet(const size_t initialCapacity = minCapacity)
-            : dense(EntityAllocator{}),
-              sparse(EntityAllocator{}),
-              components(Allocator{}) {
-            reserve(std::max(initialCapacity, minCapacity));
+        SparseSet() {
+            reserveAndAlignStorage(initialSize);
+            sparse.resize(initialSize, Entity::null());
         }
 
-        /**
-         * @brief Gets the component associated with an entity
-         */
-        // ReSharper disable once CppRedundantInlineSpecifier
+        [[nodiscard]] inline bool contains(Entity entity) const noexcept {
+            const auto id = entity.getId();
+            return id < sparse.size() &&
+                   sparse[id].getId() < dense.size() &&
+                   dense[sparse[id].getId()] == entity;
+        }
+
         [[nodiscard]] inline T& get(const Entity entity) noexcept {
-            assert(contains(entity));
             return components[sparse[entity.getId()].getId()];
         }
 
-        /**
-         * @brief Gets the component associated with an entity (const)
-         */
-        // ReSharper disable once CppRedundantInlineSpecifier
         [[nodiscard]] inline const T& get(const Entity entity) const noexcept {
-            assert(contains(entity));
             return components[sparse[entity.getId()].getId()];
         }
 
-        /**
-         * @brief Checks if an entity has a component
-         */
-        // ReSharper disable once CppRedundantInlineSpecifier
-        [[nodiscard]] inline bool contains(const Entity entity) const noexcept {
+        void insert(Entity entity, T&& component) {
             const auto entityId = entity.getId();
-            return entityId < sparse.size() &&
-                   sparse[entityId].getId() < dense.size() &&
-                   dense[sparse[entityId].getId()] == entity;
-        }
 
-        /**
-         * @brief Inserts a component for an entity
-         */
-        void insert(const Entity entity, T&& component) {
-            assureSpace(entity);
+            if (entityId >= sparse.size()) {
+                const auto newSize = roundUpPow2(entityId + 1);
+                sparse.resize(newSize, Entity::null());
+
+                if (dense.size() >= dense.capacity() / 2) {
+                    reserveAndAlignStorage(dense.capacity() * growthFactor);
+                }
+            }
 
             if (!contains(entity)) {
                 const auto pos = dense.size();
-                sparse[entity.getId()] = Entity{static_cast<EntityId>(pos)};
+                sparse[entityId] = Entity{static_cast<EntityId>(pos)};
                 dense.push_back(entity);
-                components.push_back(std::move(component));
+                components.push_back(std::forward<T>(component));
             }
         }
 
-        /**
-         * @brief Constructs a component in place for an entity
-         */
         template<typename... Args>
-        [[nodiscard]] T& emplace(const Entity entity, Args&&... args) {
-            assureSpace(entity);
+        T& emplace(Entity entity, Args&&... args) {
+            const auto entityId = entity.getId();
+
+            if (entityId >= sparse.size()) {
+                const auto newSize = roundUpPow2(entityId + 1);
+                sparse.resize(newSize, Entity::null());
+
+                if (dense.size() >= dense.capacity() / 2) {
+                    reserveAndAlignStorage(dense.capacity() * growthFactor);
+                }
+            }
 
             if (!contains(entity)) {
                 const auto pos = dense.size();
-                sparse[entity.getId()] = Entity{static_cast<EntityId>(pos)};
+                sparse[entityId] = Entity{static_cast<EntityId>(pos)};
                 dense.push_back(entity);
                 return components.emplace_back(std::forward<Args>(args)...);
             }
-            return components[sparse[entity.getId()].getId()];
+
+            return components[sparse[entityId].getId()];
         }
 
-        /**
-         * @brief Removes a component from an entity
-         */
         void remove(const Entity entity) noexcept {
             if (!contains(entity)) return;
 
-            const auto last = dense.size() - 1;
             const auto entityId = entity.getId();
-            const auto index = sparse[entityId].getId();
-            const auto lastEntity = dense[last];
+            const auto denseIndex = sparse[entityId].getId();
+            const auto lastIndex = dense.size() - 1;
+            const auto lastEntity = dense[lastIndex];
 
-            components[index] = std::move(components[last]);
-            dense[index] = dense[last];
-            sparse[lastEntity.getId()] = Entity{static_cast<EntityId>(index)};
+            components[denseIndex] = std::move(components[lastIndex]);
+            dense[denseIndex] = dense[lastIndex];
+            sparse[lastEntity.getId()] = Entity{static_cast<EntityId>(denseIndex)};
             sparse[entityId] = Entity::null();
 
             dense.pop_back();
             components.pop_back();
         }
 
-        void reserve(size_t capacity) {
-            capacity = (capacity + pageSize - 1) & ~(pageSize - 1);
-            sparse.reserve(capacity);
-            dense.reserve(capacity);
-            components.reserve(capacity);
-        }
-
-        void shrinkToFit() noexcept {
-            sparse.shrink_to_fit();
-            dense.shrink_to_fit();
-            components.shrink_to_fit();
-        }
-
         void clear() noexcept {
-            const auto currentCapacity = capacity();
+            const auto sparseSize = sparse.size();
             sparse.clear();
+            sparse.resize(sparseSize, Entity::null());
             dense.clear();
             components.clear();
-
-            if (currentCapacity >= minCapacity) {
-                reserve(currentCapacity);
-            }
         }
 
-        /**
-         * @brief Sorts components based on a comparison function
-         */
+        void reserve(const size_t capacity) {
+            reserveAndAlignStorage(capacity);
+            sparse.resize(roundUpPow2(capacity), Entity::null());
+        }
+
         template<typename Compare>
         void sort(Compare compare) {
-            const auto length = dense.size();
-            if (length <= 1) return;
+            if (dense.size() <= 1) return;
 
-            std::vector<Entity, EntityAllocator> indices(length);
+            std::vector<size_t> indices(dense.size());
             std::iota(indices.begin(), indices.end(), 0);
 
             std::sort(indices.begin(), indices.end(),
-                     [this, &compare](const auto lhs, const auto rhs) {
-                         return compare(components[lhs.getId()], components[rhs.getId()]);
-                     });
+                [&](size_t a, size_t b) {
+                    return compare(components[a], components[b]);
+                });
 
-            std::vector<T, Allocator> tempComponents;
-            std::vector<Entity, EntityAllocator> tempEntities;
-            tempComponents.reserve(length);
-            tempEntities.reserve(length);
+            std::vector<T, Allocator> sortedComponents;
+            std::vector<Entity, EntityAllocator> sortedDense;
+            sortedComponents.reserve(components.size());
+            sortedDense.reserve(dense.size());
 
-            for (size_t i = 0; i < length; ++i) {
-                const auto idx = indices[i].getId();
-                tempComponents.push_back(std::move(components[idx]));
-                tempEntities.push_back(dense[idx]);
-                sparse[dense[idx].getId()] = Entity{static_cast<EntityId>(i)};
+            for (auto idx : indices) {
+                sortedComponents.push_back(std::move(components[idx]));
+                sortedDense.push_back(dense[idx]);
+                sparse[dense[idx].getId()] = Entity{static_cast<EntityId>(sortedDense.size() - 1)};
             }
 
-            components = std::move(tempComponents);
-            dense = std::move(tempEntities);
+            components = std::move(sortedComponents);
+            dense = std::move(sortedDense);
         }
 
         [[nodiscard]] constexpr size_t size() const noexcept { return dense.size(); }
         [[nodiscard]] constexpr bool empty() const noexcept { return dense.empty(); }
-        [[nodiscard]] constexpr size_t capacity() const noexcept { return components.capacity(); }
+
+        [[nodiscard]] const auto& getEntities() const noexcept { return dense; }
+        [[nodiscard]] const auto& getComponents() const noexcept { return components; }
+        [[nodiscard]] auto& getComponents() noexcept { return components; }
 
         [[nodiscard]] auto begin() noexcept { return components.begin(); }
         [[nodiscard]] auto end() noexcept { return components.end(); }
@@ -223,10 +184,6 @@ namespace vecs {
         [[nodiscard]] auto end() const noexcept { return components.end(); }
         [[nodiscard]] auto cbegin() const noexcept { return components.cbegin(); }
         [[nodiscard]] auto cend() const noexcept { return components.cend(); }
-
-        [[nodiscard]] const std::vector<Entity, EntityAllocator>& getEntities() const noexcept { return dense; }
-        [[nodiscard]] std::vector<T, Allocator>& getComponents() noexcept { return components; }
-        [[nodiscard]] const std::vector<T, Allocator>& getComponents() const noexcept { return components; }
     };
 }
 
