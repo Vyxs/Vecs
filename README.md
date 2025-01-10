@@ -12,6 +12,7 @@ VECS is a lightweight, high-performance Entity Component System (ECS) framework 
 - **Header-Only**: Easy to integrate into existing projects
 - **Fast Component Access**: O(1) component lookup and entity validation
 - **Minimal Dependencies**: Self-contained with only STL dependencies
+- **View Support**: Efficient iteration over entities with specific component combinations
 
 ## Basic Usage
 
@@ -39,6 +40,66 @@ pos.x += vel.dx;
 pos.y += vel.dy;
 ```
 
+### Using Views
+
+Views provide an efficient way to iterate over entities that have specific component combinations:
+
+```cpp
+// Create multiple entities
+for(int i = 0; i < 1000; ++i) {
+    auto entity = ecs.createEntity();
+    ecs.addComponent(entity, Position{static_cast<float>(i), 0.0f});
+    if(i % 2 == 0) {  // Add Velocity only to even-numbered entities
+        ecs.addComponent(entity, Velocity{1.0f, 1.0f});
+    }
+}
+
+// Create a view for entities having both Position and Velocity
+auto view = ecs.view<Position, Velocity>();
+
+// Iterate over matching entities and their components
+view.each([](const Position& pos, const Velocity& vel) {
+    // Process only entities that have both components
+});
+
+// You can also get the entity along with its components
+view.each([](vecs::Entity entity, Position& pos, const Velocity& vel) {
+    // Access entity ID and components
+});
+
+// Or iterate over just the entities
+view.each([](vecs::Entity entity) {
+    // Process entity
+});
+```
+
+## Performance
+
+VECS has been benchmarked against EnTT, a widely-used ECS framework. Here are the results from our performance tests:
+
+### Benchmark Configuration
+- CPU: 28 X 2112 MHz
+- Entity Count: 10,000
+- Components: Position (x,y,z) and Velocity (dx,dy,dz)
+- Test: Iteration over all entities with both components
+- Build: Release mode with optimizations
+
+### Results
+
+| Metric | Vecs | EnTT |
+|--------|------|------|
+| Mean Time (μs) | 22.0 | 18.4 |
+| Entities/second | 454M | 545M |
+| Memory Throughput | 29.1 GB/s | 34.9 GB/s |
+| Coefficient of Variation | 0.97% | 2.05% |
+
+Key observations:
+- Both frameworks show excellent performance, processing hundreds of millions of entities per second
+- EnTT has a slight edge in raw performance (~16% faster)
+- Vecs shows better stability with lower variation in timing
+- Both frameworks achieve high memory throughput, utilizing modern CPU capabilities effectively
+
+
 ## Performance Considerations
 
 - Components are stored in contiguous arrays for cache-friendly access
@@ -51,9 +112,9 @@ pos.y += vel.dy;
 ## Planned Features
 
 ### Short Term
-- **Views**: Efficient iteration over entities with specific component combinations
-    - Single component views
-    - Multi-component views with compile-time filtering
+- ✅ **Views**: Efficient iteration over entities with specific component combinations
+    - ✅ Single component views
+    - ✅ Multi-component views with compile-time filtering
     - Exclusive/inclusive component filters
 
 ### Medium Term
@@ -78,6 +139,7 @@ pos.y += vel.dy;
 - C++21 compatible compiler
 - CMake 3.20 or higher (for building tests)
 - GoogleTest (for running tests)
+- Google Benchmark (for running benchmarks)
 
 ## License and Attribution
 

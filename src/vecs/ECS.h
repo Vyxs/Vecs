@@ -11,6 +11,8 @@
 #include <unordered_map>
 #include <typeindex>
 
+#include "View.h"
+
 namespace vecs {
     /**
      * @brief Core ECS (Entity Component System) implementation
@@ -246,6 +248,17 @@ namespace vecs {
         template<typename T>
         [[nodiscard]] const Pool<T>* getComponentPool() const noexcept {
             return tryGetPool<T>();
+        }
+
+        /**
+         * @brief Creates a view for iterating over entities with specific components
+         * @return View instance for the specified component types
+         */
+        template<typename... Components>
+        [[nodiscard]] View<Components...> view() {
+            return View<Components...>{std::make_tuple(
+                &getPool<Components>()...
+            )};
         }
     };
 }
