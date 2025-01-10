@@ -89,7 +89,7 @@ VECS has been benchmarked against EnTT, a widely-used ECS framework. Here are th
 - Test: Iteration over all entities with both components
 - Build: Release mode with optimizations
 
-### Results
+### Results with 10,000 Entities
 
 | Metric | Vecs | EnTT |
 |--------|------|------|
@@ -98,13 +98,29 @@ VECS has been benchmarked against EnTT, a widely-used ECS framework. Here are th
 | Memory Throughput | 35.14 GB/s | 33.87 GB/s |
 | Coefficient of Variation | 0.46% | 0.47% |
 
+### Results with 100,000 Entities
+
+| Metric | Vecs | EnTT |
+|--------|------|------|
+| Mean Time (μs) | 188 | 191 |
+| Entities/second | 532M | 522M |
+| Memory Throughput | 34.03 GB/s | 33.44 GB/s |
+| Coefficient of Variation | 0.97% | 0.31% |
+
+### Results with 1,000,000 Entities
+
+| Metric | Vecs | EnTT |
+|--------|------|------|
+| Mean Time (μs) | 2135 | 2240 |
+| Entities/second | 468M | 446M |
+| Memory Throughput | 29.98 GB/s | 28.57 GB/s |
+| Coefficient of Variation | 1.22% | 1.30% |
+
 Key observations:
-- VECS demonstrates superior performance, processing over 1 billion components per second
-- 3.7% faster mean execution time compared to EnTT
-- Higher memory throughput and better cache utilization
-- Excellent stability with marginally better coefficient of variation
-- Both frameworks achieve exceptional performance with negligible variance
-- Cache-friendly design yields consistent high-performance results
+- VECS maintains performance advantage across all scales (3.7%, 1.6%, and 4.7% faster)
+- Both frameworks show excellent scaling with only moderate performance degradation at 1M entities
+- Memory throughput remains consistently high, with VECS maintaining a slight edge
+- Performance stability (CV) remains competitive between frameworks at all scales
 
 ## Performance Considerations
 
